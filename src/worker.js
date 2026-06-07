@@ -72,6 +72,13 @@ async function lolFetch(path) {
 }
 
 async function getSchedule() {
+  const events = await fetchScheduleEvents();
+  await annotateStages(events);
+  events.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  return { events };
+}
+
+async function fetchScheduleEvents() {
   // The default page is the latest ~80 events; walk a few "older" pages back so
   // the month navigator has recent history + upcoming games to browse.
   const seen = new Set();
@@ -93,48 +100,70 @@ async function getSchedule() {
     token = sched?.pages?.older || null;
     if (!token) break;
   }
+  return events;
+}
 
-  await annotateStages(events);
-  events.sort((a, b) => a.startTime.localeCompare(b.startTime));
-  return { events };
+// Official-style short tags for LCK stages (lolesports gives no abbreviation).
+const SHORT_STAGE = {
+  road_to_msi: "RTM",
+  regular_season: "정규",
+  playoffs: "PO",
+  play_ins: "플레이-인",
+  play_in: "플레이-인",
+  group_stage: "그룹",
+  knockouts: "KO",
+  gauntlet: "선발전",
+};
+const shortStage = (slug, name) => SHORT_STAGE[slug] || name || "";
+
+const isRegularBlock = (b) => /주\s*차|주차|week/i.test(b || "");
+const inRange = (iso, t) => {
+  const d = iso.slice(0, 10);
+  return t.startDate <= d && d <= t.endDate;
+};
+
+async function getLckTournaments() {
+  const tdata = await lolFetch(`getTournamentsForLeague?hl=ko-KR&leagueId=${LCK_LEAGUE_ID}`);
+  return tdata?.data?.leagues?.[0]?.tournaments || [];
+}
+
+function currentTournament(tours) {
+  const today = new Date().toISOString().slice(0, 10);
+  return tours.find((t) => t.startDate <= today && today <= t.endDate) || null;
+}
+
+// matchId -> short stage tag, plus the tournament's knockout stage (fallback tag).
+async function stageInfo(tournamentId) {
+  const sdata = await lolFetch(`getStandingsV3?hl=ko-KR&tournamentId=${tournamentId}`);
+  const stages = sdata?.data?.standings?.[0]?.stages || [];
+  const matchStage = new Map();
+  let knockout = null;
+  for (const st of stages) {
+    const isRegular = st.slug === "regular_season" || /정규|regular/i.test(st.name || "");
+    const label = shortStage(st.slug, st.name);
+    if (!isRegular && label) knockout = { label, slug: st.slug, name: st.name };
+    for (const sec of st.sections || []) {
+      for (const m of sec.matches || []) {
+        if (m.id) matchStage.set(String(m.id), label);
+      }
+    }
+  }
+  return { matchStage, knockout };
 }
 
 // lolesports' schedule only carries a generic blockName ("토너먼트 스테이지").
-// Enrich the CURRENT tournament's matches with their stage name ("MSI로 가는 길")
-// from getStandingsV3 so users can tell which competition a match belongs to.
+// Enrich the CURRENT tournament's matches with a short stage tag ("RTM") so
+// users can tell which competition a match belongs to.
 async function annotateStages(events) {
   try {
-    const tdata = await lolFetch(`getTournamentsForLeague?hl=ko-KR&leagueId=${LCK_LEAGUE_ID}`);
-    const tours = tdata?.data?.leagues?.[0]?.tournaments || [];
-    const today = new Date().toISOString().slice(0, 10);
-    const current = tours.find((t) => t.startDate <= today && today <= t.endDate);
-    if (!current) return;
-
-    const sdata = await lolFetch(`getStandingsV3?hl=ko-KR&tournamentId=${current.id}`);
-    const stages = sdata?.data?.standings?.[0]?.stages || [];
-
-    const matchStage = new Map(); // matchId -> stage name (when standings expose it)
-    let knockoutStage = null; // the non-"regular season" stage name, used as fallback
-    for (const st of stages) {
-      const isRegular = st.slug === "regular_season" || /정규|regular/i.test(st.name || "");
-      if (!isRegular && st.name) knockoutStage = st.name;
-      for (const sec of st.sections || []) {
-        for (const m of sec.matches || []) {
-          if (m.id) matchStage.set(String(m.id), st.name);
-        }
-      }
-    }
-
-    const inCurrent = (iso) => {
-      const d = iso.slice(0, 10);
-      return current.startDate <= d && d <= current.endDate;
-    };
-    const isRegularBlock = (b) => /주\s*차|주차|week/i.test(b || "");
+    const cur = currentTournament(await getLckTournaments());
+    if (!cur) return;
+    const { matchStage, knockout } = await stageInfo(cur.id);
 
     for (const ev of events) {
-      if (!inCurrent(ev.startTime)) continue;
+      if (!inRange(ev.startTime, cur)) continue;
       let stage = ev.id ? matchStage.get(String(ev.id)) : null;
-      if (!stage && !isRegularBlock(ev.blockName) && knockoutStage) stage = knockoutStage;
+      if (!stage && !isRegularBlock(ev.blockName) && knockout) stage = knockout.label;
       if (stage && stage !== ev.blockName) ev.stage = stage;
     }
   } catch (_) {
@@ -183,11 +212,72 @@ const BRACKET_TAB_OR =
   ' OR MatchSchedule.Tab LIKE "%Gauntlet%" OR MatchSchedule.Tab LIKE "%Final%"' +
   ' OR MatchSchedule.Tab LIKE "%Play-In%" OR MatchSchedule.Tab LIKE "%Bracket%")';
 
+// Bracket = the CURRENT tournament's knockout first (built from the lolesports
+// schedule so it shows even when only partially drawn / TBD slots remain), and
+// only when there's no ongoing knockout do we fall back to the latest completed
+// Leaguepedia bracket tree.
+async function getBracket() {
+  try {
+    const live = await getCurrentBracketFromLol();
+    if (live && live.rounds.length) return live;
+  } catch (_) {
+    // fall through to Leaguepedia
+  }
+  return getLeaguepediaBracket();
+}
+
+// Build the in-progress knockout bracket from lolesports schedule matches.
+async function getCurrentBracketFromLol() {
+  const cur = currentTournament(await getLckTournaments());
+  if (!cur) return null;
+  const { knockout } = await stageInfo(cur.id);
+  if (!knockout) return null; // current tournament has no knockout stage
+
+  const events = await fetchScheduleEvents();
+  const ko = events.filter((e) => inRange(e.startTime, cur) && !isRegularBlock(e.blockName));
+  if (!ko.length) return null;
+  ko.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Group by blockName (each is a knockout round), preserving date order.
+  const byBlock = new Map();
+  for (const e of ko) {
+    if (!byBlock.has(e.blockName)) byBlock.set(e.blockName, []);
+    byBlock.get(e.blockName).push(e);
+  }
+  let order = 0;
+  const rounds = [...byBlock.entries()].map(([name, evs]) => ({
+    name,
+    order: order++,
+    matches: evs.map(lolMatchToBracket),
+  }));
+
+  return {
+    available: true,
+    tournament: `LCK ${cur.startDate.slice(0, 4)} · ${knockout.label}`,
+    ongoing: true,
+    rounds,
+  };
+}
+
+function lolMatchToBracket(e) {
+  const [a, b] = e.teams;
+  const played = e.state !== "unstarted";
+  return {
+    team1: a?.code || a?.name || "TBD",
+    team2: b?.code || b?.name || "TBD",
+    score1: played ? a?.gameWins ?? null : null,
+    score2: played ? b?.gameWins ?? null : null,
+    winner: a?.outcome === "win" ? 1 : b?.outcome === "win" ? 2 : null,
+    bestOf: e.bestOf,
+    startTime: e.startTime,
+  };
+}
+
 // Leaguepedia rate-limits hard, so the bracket is built from a SINGLE query:
 // grab every bracket-tab match for the league-year, then keep only the most
 // recent tournament page's rows. (Falls back to the previous year once if the
 // current year has no bracket yet.)
-async function getBracket() {
+async function getLeaguepediaBracket() {
   const year = new Date().getFullYear();
 
   let rows = await bracketRows(year);
