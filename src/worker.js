@@ -94,8 +94,52 @@ async function getSchedule() {
     if (!token) break;
   }
 
+  await annotateStages(events);
   events.sort((a, b) => a.startTime.localeCompare(b.startTime));
   return { events };
+}
+
+// lolesports' schedule only carries a generic blockName ("토너먼트 스테이지").
+// Enrich the CURRENT tournament's matches with their stage name ("MSI로 가는 길")
+// from getStandingsV3 so users can tell which competition a match belongs to.
+async function annotateStages(events) {
+  try {
+    const tdata = await lolFetch(`getTournamentsForLeague?hl=ko-KR&leagueId=${LCK_LEAGUE_ID}`);
+    const tours = tdata?.data?.leagues?.[0]?.tournaments || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const current = tours.find((t) => t.startDate <= today && today <= t.endDate);
+    if (!current) return;
+
+    const sdata = await lolFetch(`getStandingsV3?hl=ko-KR&tournamentId=${current.id}`);
+    const stages = sdata?.data?.standings?.[0]?.stages || [];
+
+    const matchStage = new Map(); // matchId -> stage name (when standings expose it)
+    let knockoutStage = null; // the non-"regular season" stage name, used as fallback
+    for (const st of stages) {
+      const isRegular = st.slug === "regular_season" || /정규|regular/i.test(st.name || "");
+      if (!isRegular && st.name) knockoutStage = st.name;
+      for (const sec of st.sections || []) {
+        for (const m of sec.matches || []) {
+          if (m.id) matchStage.set(String(m.id), st.name);
+        }
+      }
+    }
+
+    const inCurrent = (iso) => {
+      const d = iso.slice(0, 10);
+      return current.startDate <= d && d <= current.endDate;
+    };
+    const isRegularBlock = (b) => /주\s*차|주차|week/i.test(b || "");
+
+    for (const ev of events) {
+      if (!inCurrent(ev.startTime)) continue;
+      let stage = ev.id ? matchStage.get(String(ev.id)) : null;
+      if (!stage && !isRegularBlock(ev.blockName) && knockoutStage) stage = knockoutStage;
+      if (stage && stage !== ev.blockName) ev.stage = stage;
+    }
+  } catch (_) {
+    // best-effort enrichment; never block the schedule on it
+  }
 }
 
 function normalizeEvent(ev) {

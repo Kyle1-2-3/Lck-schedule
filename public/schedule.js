@@ -42,7 +42,8 @@ function matchCard(ev) {
   if (ev.bestOf) time.append(el("div", "meta", `BO${ev.bestOf}`));
 
   const teams = el("div", "match-card__teams");
-  if (ev.blockName) teams.append(el("div", "match-card__stage", ev.blockName));
+  const stageText = ev.stage ? `${ev.stage} · ${ev.blockName}` : ev.blockName;
+  if (stageText) teams.append(el("div", "match-card__stage", stageText));
   for (const t of ev.teams) teams.append(teamRow(t));
 
   const status = el("div", "match-card__status");
