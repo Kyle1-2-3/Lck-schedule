@@ -29,7 +29,7 @@ export default {
       return withCache(request, ctx, BRACKET_TTL, () => getBracket(ctx));
     }
     if (url.pathname === "/api/health") {
-      return json({ ok: true, build: "gha-1", endpoints: ["/api/schedule", "/api/bracket"] });
+      return json({ ok: true, endpoints: ["/api/schedule", "/api/bracket"] });
     }
 
     // Everything else -> static assets (index.html, styles.css, *.js).
