@@ -368,10 +368,7 @@ img {
   height: 28px;
   border-radius: var(--r-md);
   object-fit: contain;
-  /* Most LCK logos are white "dark-bg" variants — a dark chip keeps them (and
-     the colored ones) visible on the white canvas. */
-  background: var(--ink-deep);
-  padding: 3px;
+  background: var(--surface-soft);
 }
 
 .team__code {
@@ -557,8 +554,7 @@ img {
   height: 18px;
   border-radius: 4px;
   object-fit: contain;
-  background: var(--ink-deep);
-  padding: 2px;
+  background: var(--surface-soft);
 }
 
 .bm__score {

@@ -16,17 +16,17 @@ const SCHEDULE_TTL = 120;
 const BRACKET_TTL = 300;
 // Bump on any behavior change to invalidate the edge cache (caches.default isn't
 // cleared by a deploy). It namespaces the cache key.
-const CACHE_BUST = "6";
+const CACHE_BUST = "7";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/schedule") {
-      return withCache(request, ctx, SCHEDULE_TTL, () => getSchedule());
+      return withCache(request, ctx, SCHEDULE_TTL, () => getSchedule(ctx));
     }
     if (url.pathname === "/api/bracket") {
-      return withCache(request, ctx, BRACKET_TTL, () => getBracket());
+      return withCache(request, ctx, BRACKET_TTL, () => getBracket(ctx));
     }
     if (url.pathname === "/api/health") {
       return json({ ok: true, endpoints: ["/api/schedule", "/api/bracket"] });
@@ -84,11 +84,50 @@ async function lolFetch(path) {
   throw lastErr;
 }
 
-async function getSchedule() {
+async function getSchedule(ctx) {
   const events = await fetchScheduleEvents();
   await annotateStages(events);
+  await applyLightLogos(events, ctx);
   events.sort((a, b) => a.startTime.localeCompare(b.startTime));
   return { events };
+}
+
+// Many LCK logos in the schedule are white "dark-bg" variants (invisible on the
+// white canvas). getTeams exposes an `alternativeImage` (the light-bg / color
+// version); swap to it so logos stay visible without darkening the UI. The
+// image->alt map is cached separately for a day since logos rarely change.
+async function getLogoMap(ctx) {
+  const cache = caches.default;
+  const key = new Request(`https://lck-vancouver.internal/logomap?_cv=${CACHE_BUST}`);
+  const hit = await cache.match(key);
+  if (hit) return new Map(Object.entries(await hit.json()));
+
+  const data = await lolFetch(`getTeams?hl=ko-KR`);
+  const map = {};
+  for (const t of data?.data?.teams || []) {
+    const img = (t.image || "").replace(/^http:/, "https:");
+    const alt = (t.alternativeImage || "").replace(/^http:/, "https:");
+    if (img && alt && alt !== img) map[img] = alt;
+  }
+  const res = new Response(JSON.stringify(map), {
+    headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" },
+  });
+  if (ctx) ctx.waitUntil(cache.put(key, res.clone()));
+  return new Map(Object.entries(map));
+}
+
+async function applyLightLogos(events, ctx) {
+  try {
+    const map = await getLogoMap(ctx);
+    for (const ev of events) {
+      for (const t of ev.teams) {
+        const alt = map.get(t.image);
+        if (alt) t.image = alt;
+      }
+    }
+  } catch (_) {
+    // best-effort; fall back to the original (possibly white) logos
+  }
 }
 
 async function fetchScheduleEvents() {
@@ -229,24 +268,25 @@ const BRACKET_TAB_OR =
 // schedule so it shows even when only partially drawn / TBD slots remain), and
 // only when there's no ongoing knockout do we fall back to the latest completed
 // Leaguepedia bracket tree.
-async function getBracket() {
+async function getBracket(ctx) {
   // Let a transient lolesports error PROPAGATE (so withCache returns an uncached
   // error and the next load retries) rather than silently caching the wrong
   // (completed) bracket. Only fall back to Leaguepedia when there is genuinely
   // no current knockout (getCurrentBracketFromLol returns null).
-  const live = await getCurrentBracketFromLol();
+  const live = await getCurrentBracketFromLol(ctx);
   if (live && live.rounds.length) return live;
   return getLeaguepediaBracket();
 }
 
 // Build the in-progress knockout bracket from lolesports schedule matches.
-async function getCurrentBracketFromLol() {
+async function getCurrentBracketFromLol(ctx) {
   const cur = currentTournament(await getLckTournaments());
   if (!cur) return null;
   const { knockout } = await stageInfo(cur.id);
   if (!knockout) return null; // current tournament has no knockout stage
 
   const events = await fetchScheduleEvents();
+  await applyLightLogos(events, ctx);
   const ko = events.filter((e) => inRange(e.startTime, cur) && !isRegularBlock(e.blockName));
   if (!ko.length) return null;
   ko.sort((a, b) => a.startTime.localeCompare(b.startTime));
