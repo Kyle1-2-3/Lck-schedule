@@ -16,7 +16,7 @@ const SCHEDULE_TTL = 120;
 const BRACKET_TTL = 300;
 // Bump on any behavior change to invalidate the edge cache (caches.default isn't
 // cleared by a deploy). It namespaces the cache key.
-const CACHE_BUST = "4";
+const CACHE_BUST = "5";
 
 export default {
   async fetch(request, env, ctx) {
@@ -251,17 +251,21 @@ async function getCurrentBracketFromLol() {
   if (!ko.length) return null;
   ko.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-  // Group by blockName (each is a knockout round), preserving date order.
-  const byBlock = new Map();
+  // lolesports gives every knockout match the same blockName, so a single group
+  // would render as one tall column. Group by match DATE (Vancouver) instead —
+  // for a gauntlet/ladder each match day is effectively a round, which lays out
+  // as a left-to-right bracket tree.
+  const byDay = new Map();
   for (const e of ko) {
-    if (!byBlock.has(e.blockName)) byBlock.set(e.blockName, []);
-    byBlock.get(e.blockName).push(e);
+    const k = vanDateKey(e.startTime);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(e);
   }
-  let order = 0;
-  const rounds = [...byBlock.entries()].map(([name, evs]) => ({
-    name,
-    order: order++,
-    matches: evs.map(lolMatchToBracket),
+  const keys = [...byDay.keys()].sort();
+  const rounds = keys.map((k, i) => ({
+    name: vanDateLabel(byDay.get(k)[0].startTime),
+    order: i,
+    matches: byDay.get(k).map(lolMatchToBracket),
   }));
 
   return {
@@ -270,6 +274,19 @@ async function getCurrentBracketFromLol() {
     ongoing: true,
     rounds,
   };
+}
+
+const VANCOUVER_TZ = "America/Vancouver";
+const vanDateKey = (iso) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: VANCOUVER_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(iso));
+function vanDateLabel(iso) {
+  const o = {};
+  for (const p of new Intl.DateTimeFormat("en-CA", {
+    timeZone: VANCOUVER_TZ, month: "numeric", day: "numeric",
+  }).formatToParts(new Date(iso))) o[p.type] = p.value;
+  return `${o.month}/${o.day}`;
 }
 
 function lolMatchToBracket(e) {
