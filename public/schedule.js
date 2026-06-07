@@ -38,10 +38,11 @@ function matchCard(ev) {
   if (badge.live) card.classList.add("is-live");
 
   const time = el("div", "match-card__time");
-  time.append(el("div", null, fmtTime(ev.startTime)));
-  if (ev.bestOf) time.append(el("div", "team__name", `BO${ev.bestOf}`));
+  time.append(el("div", "time", fmtTime(ev.startTime)));
+  if (ev.bestOf) time.append(el("div", "meta", `BO${ev.bestOf}`));
 
   const teams = el("div", "match-card__teams");
+  if (ev.blockName) teams.append(el("div", "match-card__stage", ev.blockName));
   for (const t of ev.teams) teams.append(teamRow(t));
 
   const status = el("div", "match-card__status");

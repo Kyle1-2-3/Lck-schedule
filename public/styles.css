@@ -340,6 +340,14 @@ img {
   min-width: 0;
 }
 
+.match-card__stage {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--slate);
+  margin-bottom: 2px;
+}
+
 .match-card__status {
   flex: 0 0 auto;
   display: flex;
