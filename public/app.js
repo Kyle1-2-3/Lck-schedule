@@ -12,7 +12,6 @@ const els = {
   monthLabel: $("month-label"),
   prev: $("prev-month"),
   next: $("next-month"),
-  updated: $("updated"),
 };
 
 const store = {
@@ -68,7 +67,6 @@ async function loadSchedule() {
     }
     store.range = monthRange(store.events);
     store.month = clampMonth(todayMonthKey(), store.range.min, store.range.max);
-    if (data.updatedAt) els.updated.textContent = `업데이트: ${new Date(data.updatedAt).toLocaleString("ko-KR", { timeZone: "America/Vancouver" })}`;
     paintMonth();
   } catch (e) {
     errorBox(els.scheduleBody, loadSchedule);
