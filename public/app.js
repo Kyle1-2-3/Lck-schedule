@@ -12,7 +12,7 @@ const els = {
   monthLabel: $("month-label"),
   prev: $("prev-month"),
   next: $("next-month"),
-  region: $("region-select"),
+  region: $("region"),
 };
 
 const store = {
@@ -23,23 +23,8 @@ const store = {
   bracketLoaded: false,
 };
 
-// Common LCK-fan regions for the timezone picker.
-const REGIONS = [
-  { tz: "Asia/Seoul", label: "🇰🇷 서울 (KST)" },
-  { tz: "America/Los_Angeles", label: "🇺🇸 LA·밴쿠버 (PT)" },
-  { tz: "America/Denver", label: "🇺🇸 덴버 (MT)" },
-  { tz: "America/Chicago", label: "🇺🇸 시카고 (CT)" },
-  { tz: "America/New_York", label: "🇺🇸 뉴욕 (ET)" },
-  { tz: "America/Sao_Paulo", label: "🇧🇷 상파울루 (BRT)" },
-  { tz: "Europe/London", label: "🇬🇧 런던 (GMT)" },
-  { tz: "Europe/Paris", label: "🇪🇺 파리·베를린 (CET)" },
-  { tz: "Europe/Moscow", label: "🇷🇺 모스크바 (MSK)" },
-  { tz: "Asia/Dubai", label: "🇦🇪 두바이 (GST)" },
-  { tz: "Asia/Kolkata", label: "🇮🇳 인도 (IST)" },
-  { tz: "Asia/Singapore", label: "🇸🇬 싱가포르 (SGT)" },
-  { tz: "Asia/Tokyo", label: "🇯🇵 도쿄 (JST)" },
-  { tz: "Australia/Sydney", label: "🇦🇺 시드니 (AET)" },
-];
+// Only two regions: Vancouver and Korea.
+const REGION_TZS = ["America/Vancouver", "Asia/Seoul"];
 
 function loading(container, msg) {
   container.innerHTML = `<div class="loading"><span class="spinner"></span>${msg || "불러오는 중…"}</div>`;
@@ -119,18 +104,20 @@ async function loadBracket() {
 // --- region / timezone ------------------------------------------------------
 
 function initRegion() {
-  const cur = getTZ();
-  const list = REGIONS.some((r) => r.tz === cur)
-    ? REGIONS
-    : [{ tz: cur, label: `🌐 ${cur}` }, ...REGIONS];
-  els.region.innerHTML = list
-    .map((r) => `<option value="${r.tz}">${r.label}</option>`)
-    .join("");
-  els.region.value = cur;
-  els.region.onchange = () => {
-    setTZ(els.region.value);
-    onTZChange();
-  };
+  // Default to Vancouver unless Korea was previously chosen.
+  if (!REGION_TZS.includes(getTZ())) setTZ("America/Vancouver");
+
+  const btns = els.region.querySelectorAll(".region__btn");
+  const paint = () =>
+    btns.forEach((b) => b.classList.toggle("is-active", b.dataset.tz === getTZ()));
+  btns.forEach((b) => {
+    b.onclick = () => {
+      setTZ(b.dataset.tz);
+      paint();
+      onTZChange();
+    };
+  });
+  paint();
 }
 
 // Re-render everything already loaded in the newly selected timezone.
