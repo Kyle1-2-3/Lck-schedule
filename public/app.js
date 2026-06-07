@@ -40,7 +40,9 @@ function errorBox(container, onRetry) {
 }
 
 async function getJSON(url) {
-  const res = await fetch(url);
+  // Bypass the browser HTTP cache so a reload always reflects the live edge data
+  // (the Worker still serves its own short-lived edge cache, so this stays fast).
+  const res = await fetch(url, { cache: "no-store" });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
