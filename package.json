@@ -1,0 +1,13 @@
+{
+  "name": "lck-vancouver",
+  "version": "1.0.0",
+  "description": "밴쿠버 시간 기준 LCK 일정 + 플레이오프 대진표",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

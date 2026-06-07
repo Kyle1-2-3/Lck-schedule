@@ -1,0 +1,111 @@
+import { renderSchedule, monthRange } from "./schedule.js";
+import { renderBracket } from "./bracket.js";
+import { todayMonthKey, stepMonth, clampMonth, fmtMonthLabel } from "./util.js";
+
+const $ = (id) => document.getElementById(id);
+
+const els = {
+  tabs: document.querySelectorAll(".pill-tab"),
+  views: { schedule: $("view-schedule"), bracket: $("view-bracket") },
+  scheduleBody: $("schedule-body"),
+  bracketBody: $("bracket-body"),
+  monthLabel: $("month-label"),
+  prev: $("prev-month"),
+  next: $("next-month"),
+  updated: $("updated"),
+};
+
+const store = {
+  events: null,
+  range: null,
+  month: null,
+  bracketLoaded: false,
+};
+
+function loading(container, msg) {
+  container.innerHTML = `<div class="loading"><span class="spinner"></span>${msg || "불러오는 중…"}</div>`;
+}
+
+function errorBox(container, onRetry) {
+  container.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "error";
+  box.textContent = "데이터를 불러오지 못했어요.";
+  const btn = document.createElement("button");
+  btn.className = "retry-btn";
+  btn.textContent = "다시 시도";
+  btn.onclick = onRetry;
+  box.append(document.createElement("br"), btn);
+  container.append(box);
+}
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// --- schedule ---------------------------------------------------------------
+
+function paintMonth() {
+  els.monthLabel.textContent = fmtMonthLabel(store.month);
+  els.prev.disabled = store.month <= store.range.min;
+  els.next.disabled = store.month >= store.range.max;
+  renderSchedule(store.events, store.month, els.scheduleBody);
+}
+
+async function loadSchedule() {
+  loading(els.scheduleBody);
+  try {
+    const data = await getJSON("/api/schedule");
+    store.events = data.events || [];
+    if (!store.events.length) {
+      els.scheduleBody.innerHTML = `<div class="empty">표시할 경기가 없어요.</div>`;
+      return;
+    }
+    store.range = monthRange(store.events);
+    store.month = clampMonth(todayMonthKey(), store.range.min, store.range.max);
+    if (data.updatedAt) els.updated.textContent = `업데이트: ${new Date(data.updatedAt).toLocaleString("ko-KR", { timeZone: "America/Vancouver" })}`;
+    paintMonth();
+  } catch (e) {
+    errorBox(els.scheduleBody, loadSchedule);
+  }
+}
+
+els.prev.onclick = () => {
+  store.month = clampMonth(stepMonth(store.month, -1), store.range.min, store.range.max);
+  paintMonth();
+};
+els.next.onclick = () => {
+  store.month = clampMonth(stepMonth(store.month, 1), store.range.min, store.range.max);
+  paintMonth();
+};
+
+// --- bracket ----------------------------------------------------------------
+
+async function loadBracket() {
+  loading(els.bracketBody);
+  try {
+    const data = await getJSON("/api/bracket");
+    renderBracket(data, els.bracketBody);
+    store.bracketLoaded = true;
+  } catch (e) {
+    errorBox(els.bracketBody, loadBracket);
+  }
+}
+
+// --- tabs -------------------------------------------------------------------
+
+function switchTab(name) {
+  els.tabs.forEach((t) => t.classList.toggle("is-active", t.dataset.tab === name));
+  els.views.schedule.hidden = name !== "schedule";
+  els.views.bracket.hidden = name !== "bracket";
+  if (name === "bracket" && !store.bracketLoaded) loadBracket();
+}
+
+els.tabs.forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
+
+// --- boot -------------------------------------------------------------------
+
+loadSchedule();
