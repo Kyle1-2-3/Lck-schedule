@@ -7,11 +7,24 @@ function el(tag, cls, text) {
   return n;
 }
 
-function teamLine(name, score, isWinner, isLoser) {
+function teamLine(name, logo, score, isWinner, isLoser) {
   const row = el("div", "bm__team");
   if (isWinner) row.classList.add("is-winner");
   if (isLoser) row.classList.add("is-loser");
-  row.append(el("span", null, name || "TBD"));
+
+  const left = el("span", "bm__name");
+  if (logo) {
+    const img = document.createElement("img");
+    img.className = "bm__logo";
+    img.src = logo;
+    img.alt = name || "";
+    img.loading = "lazy";
+    img.onerror = () => { img.style.visibility = "hidden"; };
+    left.append(img);
+  }
+  left.append(el("span", null, name || "TBD"));
+
+  row.append(left);
   row.append(el("span", "bm__score", score == null ? "" : String(score)));
   return row;
 }
@@ -19,8 +32,8 @@ function teamLine(name, score, isWinner, isLoser) {
 function matchBox(m) {
   const box = el("div", "bracket__match");
   box.append(
-    teamLine(m.team1, m.score1, m.winner === 1, m.winner === 2),
-    teamLine(m.team2, m.score2, m.winner === 2, m.winner === 1)
+    teamLine(m.team1, m.logo1, m.score1, m.winner === 1, m.winner === 2),
+    teamLine(m.team2, m.logo2, m.score2, m.winner === 2, m.winner === 1)
   );
   const meta = [];
   if (m.bestOf) meta.push(`BO${m.bestOf}`);

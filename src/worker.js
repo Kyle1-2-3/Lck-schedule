@@ -16,7 +16,7 @@ const SCHEDULE_TTL = 120;
 const BRACKET_TTL = 300;
 // Bump on any behavior change to invalidate the edge cache (caches.default isn't
 // cleared by a deploy). It namespaces the cache key.
-const CACHE_BUST = "5";
+const CACHE_BUST = "6";
 
 export default {
   async fetch(request, env, ctx) {
@@ -295,6 +295,8 @@ function lolMatchToBracket(e) {
   return {
     team1: a?.code || a?.name || "TBD",
     team2: b?.code || b?.name || "TBD",
+    logo1: a?.image || "",
+    logo2: b?.image || "",
     score1: played ? a?.gameWins ?? null : null,
     score2: played ? b?.gameWins ?? null : null,
     winner: a?.outcome === "win" ? 1 : b?.outcome === "win" ? 2 : null,

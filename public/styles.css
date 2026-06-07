@@ -368,7 +368,10 @@ img {
   height: 28px;
   border-radius: var(--r-md);
   object-fit: contain;
-  background: var(--surface-soft);
+  /* Most LCK logos are white "dark-bg" variants — a dark chip keeps them (and
+     the colored ones) visible on the white canvas. */
+  background: var(--ink-deep);
+  padding: 3px;
 }
 
 .team__code {
@@ -536,10 +539,26 @@ img {
 .bm__team .bm__name {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+
+.bm__team .bm__name > span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--ink);
+}
+
+.bm__logo {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: var(--ink-deep);
+  padding: 2px;
 }
 
 .bm__score {
