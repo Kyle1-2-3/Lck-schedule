@@ -13,7 +13,10 @@ const LP_UA = "LCK-Vancouver/1.0 (personal schedule site; bridge11korea@gmail.co
 
 // Cache TTLs (seconds). lolesports is CloudFront-cached and cheap; Leaguepedia rate-limits hard.
 const SCHEDULE_TTL = 120;
-const BRACKET_TTL = 1800;
+const BRACKET_TTL = 300;
+// Bump on any behavior change to invalidate the edge cache (caches.default isn't
+// cleared by a deploy). It namespaces the cache key.
+const CACHE_BUST = "4";
 
 export default {
   async fetch(request, env, ctx) {
@@ -46,7 +49,9 @@ function json(obj, ttl) {
 // copy if one exists (important for Leaguepedia's aggressive rate limiting).
 async function withCache(request, ctx, ttl, producer) {
   const cache = caches.default;
-  const cacheKey = new Request(new URL(request.url).toString(), { method: "GET" });
+  const u = new URL(request.url);
+  u.searchParams.set("_cv", CACHE_BUST);
+  const cacheKey = new Request(u.toString(), { method: "GET" });
 
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
@@ -64,11 +69,19 @@ async function withCache(request, ctx, ttl, producer) {
 // --- schedule (lolesports) ---------------------------------------------------
 
 async function lolFetch(path) {
-  const res = await fetch(`${LOL_BASE}/${path}`, {
-    headers: { "x-api-key": LOL_KEY },
-  });
-  if (!res.ok) throw new Error(`lolesports ${path} -> HTTP ${res.status}`);
-  return res.json();
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(`${LOL_BASE}/${path}`, {
+        headers: { "x-api-key": LOL_KEY },
+      });
+      if (!res.ok) throw new Error(`lolesports ${path} -> HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
 }
 
 async function getSchedule() {
@@ -217,12 +230,12 @@ const BRACKET_TAB_OR =
 // only when there's no ongoing knockout do we fall back to the latest completed
 // Leaguepedia bracket tree.
 async function getBracket() {
-  try {
-    const live = await getCurrentBracketFromLol();
-    if (live && live.rounds.length) return live;
-  } catch (_) {
-    // fall through to Leaguepedia
-  }
+  // Let a transient lolesports error PROPAGATE (so withCache returns an uncached
+  // error and the next load retries) rather than silently caching the wrong
+  // (completed) bracket. Only fall back to Leaguepedia when there is genuinely
+  // no current knockout (getCurrentBracketFromLol returns null).
+  const live = await getCurrentBracketFromLol();
+  if (live && live.rounds.length) return live;
   return getLeaguepediaBracket();
 }
 
