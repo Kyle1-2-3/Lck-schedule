@@ -1,5 +1,33 @@
-// Time helpers — everything is rendered in Vancouver local time.
-export const TZ = "America/Vancouver";
+// Time helpers — everything is rendered in the user's selected region time.
+// Defaults to the browser-detected timezone; the choice persists in localStorage.
+const STORAGE_KEY = "lck-tz";
+
+function detectTZ() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Vancouver";
+  } catch (_) {
+    return "America/Vancouver";
+  }
+}
+
+let TZ = (() => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) || detectTZ();
+  } catch (_) {
+    return detectTZ();
+  }
+})();
+
+export function getTZ() {
+  return TZ;
+}
+
+export function setTZ(tz) {
+  TZ = tz;
+  try {
+    localStorage.setItem(STORAGE_KEY, tz);
+  } catch (_) {}
+}
 
 const WK = { Sun: "일", Mon: "월", Tue: "화", Wed: "수", Thu: "목", Fri: "금", Sat: "토" };
 

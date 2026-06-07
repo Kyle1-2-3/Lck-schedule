@@ -1,4 +1,4 @@
-name = "lck-vancouver"
+name = "lck-global-schedule"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"
 

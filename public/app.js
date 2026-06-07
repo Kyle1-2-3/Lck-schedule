@@ -1,6 +1,6 @@
 import { renderSchedule, monthRange } from "./schedule.js";
 import { renderBracket } from "./bracket.js";
-import { todayMonthKey, stepMonth, clampMonth, fmtMonthLabel } from "./util.js";
+import { todayMonthKey, stepMonth, clampMonth, fmtMonthLabel, getTZ, setTZ } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,14 +12,34 @@ const els = {
   monthLabel: $("month-label"),
   prev: $("prev-month"),
   next: $("next-month"),
+  region: $("region-select"),
 };
 
 const store = {
   events: null,
   range: null,
   month: null,
+  bracketData: null,
   bracketLoaded: false,
 };
+
+// Common LCK-fan regions for the timezone picker.
+const REGIONS = [
+  { tz: "Asia/Seoul", label: "🇰🇷 서울 (KST)" },
+  { tz: "America/Los_Angeles", label: "🇺🇸 LA·밴쿠버 (PT)" },
+  { tz: "America/Denver", label: "🇺🇸 덴버 (MT)" },
+  { tz: "America/Chicago", label: "🇺🇸 시카고 (CT)" },
+  { tz: "America/New_York", label: "🇺🇸 뉴욕 (ET)" },
+  { tz: "America/Sao_Paulo", label: "🇧🇷 상파울루 (BRT)" },
+  { tz: "Europe/London", label: "🇬🇧 런던 (GMT)" },
+  { tz: "Europe/Paris", label: "🇪🇺 파리·베를린 (CET)" },
+  { tz: "Europe/Moscow", label: "🇷🇺 모스크바 (MSK)" },
+  { tz: "Asia/Dubai", label: "🇦🇪 두바이 (GST)" },
+  { tz: "Asia/Kolkata", label: "🇮🇳 인도 (IST)" },
+  { tz: "Asia/Singapore", label: "🇸🇬 싱가포르 (SGT)" },
+  { tz: "Asia/Tokyo", label: "🇯🇵 도쿄 (JST)" },
+  { tz: "Australia/Sydney", label: "🇦🇺 시드니 (AET)" },
+];
 
 function loading(container, msg) {
   container.innerHTML = `<div class="loading"><span class="spinner"></span>${msg || "불러오는 중…"}</div>`;
@@ -88,11 +108,39 @@ async function loadBracket() {
   loading(els.bracketBody);
   try {
     const data = await getJSON("/api/bracket");
+    store.bracketData = data;
     renderBracket(data, els.bracketBody);
     store.bracketLoaded = true;
   } catch (e) {
     errorBox(els.bracketBody, loadBracket);
   }
+}
+
+// --- region / timezone ------------------------------------------------------
+
+function initRegion() {
+  const cur = getTZ();
+  const list = REGIONS.some((r) => r.tz === cur)
+    ? REGIONS
+    : [{ tz: cur, label: `🌐 ${cur}` }, ...REGIONS];
+  els.region.innerHTML = list
+    .map((r) => `<option value="${r.tz}">${r.label}</option>`)
+    .join("");
+  els.region.value = cur;
+  els.region.onchange = () => {
+    setTZ(els.region.value);
+    onTZChange();
+  };
+}
+
+// Re-render everything already loaded in the newly selected timezone.
+function onTZChange() {
+  if (store.events) {
+    store.range = monthRange(store.events);
+    store.month = clampMonth(store.month, store.range.min, store.range.max);
+    paintMonth();
+  }
+  if (store.bracketData) renderBracket(store.bracketData, els.bracketBody);
 }
 
 // --- tabs -------------------------------------------------------------------
@@ -108,4 +156,5 @@ els.tabs.forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
 
 // --- boot -------------------------------------------------------------------
 
+initRegion();
 loadSchedule();

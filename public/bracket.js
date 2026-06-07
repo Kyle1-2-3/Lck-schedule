@@ -63,7 +63,10 @@ export function renderBracket(data, container) {
   const bracket = el("div", "bracket");
   for (const round of data.rounds) {
     const col = el("div", "bracket__round");
-    col.append(el("div", "bracket__round-title", round.name));
+    // For the live (lolesports) bracket, round.date lets us label the round in
+    // the user's selected timezone; Leaguepedia rounds keep their text name.
+    const title = round.date ? fmtShortDate(round.date) : round.name;
+    col.append(el("div", "bracket__round-title", title));
     for (const m of round.matches) col.append(matchBox(m));
     bracket.append(col);
   }

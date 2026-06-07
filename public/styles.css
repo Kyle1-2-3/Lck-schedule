@@ -164,14 +164,61 @@ img {
   border-bottom: 1px solid var(--hairline-soft);
   padding: var(--md) var(--base) var(--sm);
   box-shadow: var(--elev);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--sm);
+  row-gap: var(--xs);
 }
 
 .topnav__brand {
-  display: block;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--ink-deep);
+  margin-right: auto;
+}
+
+/* Region / timezone picker */
+.region {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.region__pin {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.region__select {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.region__select:focus {
+  outline: none;
+}
+
+.region::after {
+  content: "▾";
+  font-size: 10px;
+  color: var(--steel);
+  margin-left: -2px;
+  pointer-events: none;
 }
 
 .topnav__sub {
@@ -189,6 +236,7 @@ img {
   flex-wrap: wrap;
   gap: var(--xs);
   margin-top: var(--md);
+  flex-basis: 100%;
 }
 
 .pill-tab {

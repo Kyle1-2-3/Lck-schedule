@@ -16,7 +16,7 @@ const SCHEDULE_TTL = 120;
 const BRACKET_TTL = 300;
 // Bump on any behavior change to invalidate the edge cache (caches.default isn't
 // cleared by a deploy). It namespaces the cache key.
-const CACHE_BUST = "7";
+const CACHE_BUST = "8";
 
 export default {
   async fetch(request, env, ctx) {
@@ -304,6 +304,7 @@ async function getCurrentBracketFromLol(ctx) {
   const keys = [...byDay.keys()].sort();
   const rounds = keys.map((k, i) => ({
     name: vanDateLabel(byDay.get(k)[0].startTime),
+    date: byDay.get(k)[0].startTime, // representative time; the client labels it in its own TZ
     order: i,
     matches: byDay.get(k).map(lolMatchToBracket),
   }));
