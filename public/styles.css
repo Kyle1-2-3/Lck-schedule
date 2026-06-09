@@ -403,10 +403,10 @@ img {
   width: 28px;
   height: 28px;
   border-radius: var(--r-md);
-  background: var(--surface-soft);
+  /* No tinted box — sit logos straight on the page so the frame doesn't show
+     against the white background. */
+  background: transparent;
   overflow: hidden;
-  /* Contain the blend so logos with baked-in white backgrounds blend only
-     with the box, not the page behind it. */
   isolation: isolate;
 }
 
@@ -601,7 +601,7 @@ img {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  background: var(--surface-soft);
+  background: transparent;
   overflow: hidden;
   isolation: isolate;
 }
