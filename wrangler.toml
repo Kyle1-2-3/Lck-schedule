@@ -1,6 +1,7 @@
 name = "lck-global-schedule"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"
+account_id = "4c82f6200b6e601f839b3087dfde7d58"
 
 [assets]
 directory = "./public"
