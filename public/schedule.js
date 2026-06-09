@@ -18,17 +18,19 @@ function teamRow(t) {
   if (t.outcome === "win") row.classList.add("is-winner");
   if (t.outcome === "loss") row.classList.add("is-loser");
 
-  const logo = el("img", "team__logo");
+  const logo = el("img", "team__logo-img");
   logo.src = t.image || "";
   logo.alt = t.code;
   logo.loading = "lazy";
   logo.onerror = () => { logo.style.visibility = "hidden"; };
+  const logoBox = el("span", "team__logo");
+  logoBox.append(logo);
 
   const code = el("span", "team__code", t.code);
   const name = el("span", "team__name", t.name);
   const score = el("span", "team__score", t.gameWins == null ? "" : String(t.gameWins));
 
-  row.append(logo, code, name, score);
+  row.append(logoBox, code, name, score);
   return row;
 }
 

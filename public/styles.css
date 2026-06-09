@@ -403,8 +403,20 @@ img {
   width: 28px;
   height: 28px;
   border-radius: var(--r-md);
-  object-fit: contain;
   background: var(--surface-soft);
+  overflow: hidden;
+  /* Contain the blend so logos with baked-in white backgrounds blend only
+     with the box, not the page behind it. */
+  isolation: isolate;
+}
+
+.team__logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* White (255) × box gray = box gray, so baked-in white backgrounds melt
+     into the box; colored logo art stays. */
+  mix-blend-mode: multiply;
 }
 
 .team__code {
@@ -589,8 +601,16 @@ img {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  object-fit: contain;
   background: var(--surface-soft);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.bm__logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
 }
 
 .bm__score {

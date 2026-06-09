@@ -15,12 +15,14 @@ function teamLine(name, logo, score, isWinner, isLoser) {
   const left = el("span", "bm__name");
   if (logo) {
     const img = document.createElement("img");
-    img.className = "bm__logo";
+    img.className = "bm__logo-img";
     img.src = logo;
     img.alt = name || "";
     img.loading = "lazy";
     img.onerror = () => { img.style.visibility = "hidden"; };
-    left.append(img);
+    const box = el("span", "bm__logo");
+    box.append(img);
+    left.append(box);
   }
   left.append(el("span", null, name || "TBD"));
 
