@@ -445,8 +445,7 @@ img {
   color: var(--ink-deep);
 }
 
-.team.is-loser .team__code,
-.team.is-loser .team__name {
+.team.is-loser .team__code {
   color: var(--stone);
 }
 
@@ -762,12 +761,6 @@ img {
 
   .day-group__date {
     top: 80px;
-  }
-}
-
-@media (max-width: 419px) {
-  .team__name {
-    display: none;
   }
 }
 
