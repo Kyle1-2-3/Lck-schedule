@@ -427,18 +427,6 @@ img {
   color: var(--ink-deep);
 }
 
-.team__name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--slate);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .team__score {
   flex: 0 0 auto;
   margin-left: auto;

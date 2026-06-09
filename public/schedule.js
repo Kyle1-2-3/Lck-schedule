@@ -27,10 +27,9 @@ function teamRow(t) {
   logoBox.append(logo);
 
   const code = el("span", "team__code", t.code);
-  const name = el("span", "team__name", t.name);
   const score = el("span", "team__score", t.gameWins == null ? "" : String(t.gameWins));
 
-  row.append(logoBox, code, name, score);
+  row.append(logoBox, code, score);
   return row;
 }
 
