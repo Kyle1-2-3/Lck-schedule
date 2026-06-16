@@ -6,7 +6,12 @@
 
 const LOL_BASE = "https://esports-api.lolesports.com/persisted/gw";
 const LOL_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"; // long-standing public watch.lolesports.com key
-const LCK_LEAGUE_ID = "98767991310872058";
+const LEAGUES = [
+  { slug: "lck", id: "98767991310872058", label: "LCK" },
+  { slug: "msi", id: "98767991325878492", label: "MSI" },
+  { slug: "worlds", id: "98767975604431411", label: "Worlds" },
+];
+const LCK_LEAGUE = LEAGUES[0];
 
 const LP_BASE = "https://lol.fandom.com/api.php";
 const LP_UA = "LCK-Vancouver/1.0 (personal schedule site; bridge11korea@gmail.com)";
@@ -85,10 +90,15 @@ async function lolFetch(path) {
 }
 
 async function getSchedule(ctx) {
-  const events = await fetchScheduleEvents();
-  await annotateStages(events);
+  // Fetch every covered league in parallel. LCK (index 0) is the primary feed:
+  // if it fails, surface the error. MSI/Worlds are best-effort add-ons.
+  const results = await Promise.allSettled(LEAGUES.map((lg) => fetchScheduleEvents(lg)));
+  if (results[0].status === "rejected") throw results[0].reason;
+  const arrays = results.map((r) => (r.status === "fulfilled" ? r.value : []));
+
+  const events = mergeEvents(arrays);
+  await annotateStages(events);          // LCK-only stage tags (RTM/PO/…)
   await applyLightLogos(events, ctx);
-  events.sort((a, b) => a.startTime.localeCompare(b.startTime));
   return { events };
 }
 
@@ -130,7 +140,7 @@ async function applyLightLogos(events, ctx) {
   }
 }
 
-async function fetchScheduleEvents() {
+async function fetchScheduleEvents(league) {
   // The default page is the latest ~80 events; walk a few "older" pages back so
   // the month navigator has recent history + upcoming games to browse.
   const seen = new Set();
@@ -138,7 +148,7 @@ async function fetchScheduleEvents() {
   let token = null;
 
   for (let i = 0; i < 4; i++) {
-    const q = `getSchedule?hl=ko-KR&leagueId=${LCK_LEAGUE_ID}` +
+    const q = `getSchedule?hl=ko-KR&leagueId=${league.id}` +
       (token ? `&pageToken=${encodeURIComponent(token)}` : "");
     const data = await lolFetch(q);
     const sched = data?.data?.schedule;
@@ -147,7 +157,7 @@ async function fetchScheduleEvents() {
       const id = ev?.match?.id || `${ev.startTime}-${ev.blockName}`;
       if (seen.has(id)) continue;
       seen.add(id);
-      events.push(normalizeEvent(ev));
+      events.push(normalizeEvent(ev, league));
     }
     token = sched?.pages?.older || null;
     if (!token) break;
@@ -175,7 +185,7 @@ const inRange = (iso, t) => {
 };
 
 async function getLckTournaments() {
-  const tdata = await lolFetch(`getTournamentsForLeague?hl=ko-KR&leagueId=${LCK_LEAGUE_ID}`);
+  const tdata = await lolFetch(`getTournamentsForLeague?hl=ko-KR&leagueId=${LCK_LEAGUE.id}`);
   return tdata?.data?.leagues?.[0]?.tournaments || [];
 }
 
@@ -223,7 +233,7 @@ async function annotateStages(events) {
   }
 }
 
-function normalizeEvent(ev) {
+export function normalizeEvent(ev, league) {
   const m = ev.match || {};
   const teams = (m.teams || []).map((t) => ({
     code: t.code || "TBD",
@@ -238,8 +248,27 @@ function normalizeEvent(ev) {
     state: ev.state, // unstarted | inProgress | completed
     blockName: ev.blockName || "",
     bestOf: m.strategy?.count ?? null,
+    league: league ? league.slug : "",
+    leagueLabel: league ? league.label : "",
     teams,
   };
+}
+
+// Merge per-league event arrays: dedupe by match id (fall back to a composite
+// key for TBD matches with no id), then sort ascending by start time.
+export function mergeEvents(arrays) {
+  const seen = new Set();
+  const out = [];
+  for (const arr of arrays) {
+    for (const ev of arr || []) {
+      const id = ev.id || `${ev.startTime}-${ev.league}-${ev.blockName}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(ev);
+    }
+  }
+  out.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  return out;
 }
 
 // --- bracket (Leaguepedia Cargo) ---------------------------------------------
