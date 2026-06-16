@@ -97,3 +97,14 @@ export function clampMonth(key, min, max) {
   if (key > max) return max;
   return key;
 }
+
+// Widen a {min,max} "YYYY-MM" range so the current month and its immediate
+// neighbors are always reachable with the arrows, even when the data has no
+// matches there yet (e.g. between splits, before the next event is scheduled).
+export function expandRange(range, todayKey) {
+  const lo = stepMonth(todayKey, -1);
+  const hi = stepMonth(todayKey, 1);
+  const min = range && range.min && range.min < lo ? range.min : lo;
+  const max = range && range.max && range.max > hi ? range.max : hi;
+  return { min, max };
+}

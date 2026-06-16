@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "밴쿠버 시간 기준 LCK 일정 + 플레이오프 대진표",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "node --test"
   },
   "devDependencies": {
     "wrangler": "^4"

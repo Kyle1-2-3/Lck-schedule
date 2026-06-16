@@ -1,6 +1,6 @@
 import { renderSchedule, monthRange } from "./schedule.js";
 import { renderBracket } from "./bracket.js";
-import { todayMonthKey, stepMonth, clampMonth, fmtMonthLabel, getTZ, setTZ } from "./util.js";
+import { todayMonthKey, stepMonth, clampMonth, fmtMonthLabel, getTZ, setTZ, expandRange } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -70,7 +70,7 @@ async function loadSchedule() {
       els.scheduleBody.innerHTML = `<div class="empty">표시할 경기가 없어요.</div>`;
       return;
     }
-    store.range = monthRange(store.events);
+    store.range = expandRange(monthRange(store.events), todayMonthKey());
     store.month = clampMonth(todayMonthKey(), store.range.min, store.range.max);
     paintMonth();
   } catch (e) {
@@ -123,7 +123,7 @@ function initRegion() {
 // Re-render everything already loaded in the newly selected timezone.
 function onTZChange() {
   if (store.events) {
-    store.range = monthRange(store.events);
+    store.range = expandRange(monthRange(store.events), todayMonthKey());
     store.month = clampMonth(store.month, store.range.min, store.range.max);
     paintMonth();
   }
