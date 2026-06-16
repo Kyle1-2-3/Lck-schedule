@@ -21,7 +21,7 @@ const SCHEDULE_TTL = 120;
 const BRACKET_TTL = 300;
 // Bump on any behavior change to invalidate the edge cache (caches.default isn't
 // cleared by a deploy). It namespaces the cache key.
-const CACHE_BUST = "8";
+const CACHE_BUST = "9";
 
 export default {
   async fetch(request, env, ctx) {
@@ -194,6 +194,41 @@ function currentTournament(tours) {
   return tours.find((t) => t.startDate <= today && today <= t.endDate) || null;
 }
 
+// Tournaments across every covered league, tagged with their league (best-effort
+// per league — one league failing shouldn't blank the bracket).
+async function allTournaments() {
+  const out = [];
+  for (const lg of LEAGUES) {
+    try {
+      const data = await lolFetch(`getTournamentsForLeague?hl=ko-KR&leagueId=${lg.id}`);
+      for (const t of data?.data?.leagues?.[0]?.tournaments || []) {
+        if (t.startDate && t.endDate) out.push({ ...t, league: lg.slug, leagueObj: lg });
+      }
+    } catch (_) { /* skip this league */ }
+  }
+  return out;
+}
+
+// Across all covered leagues, choose the tournament whose bracket to show:
+//   1) an ongoing tournament (latest-starting one if several overlap),
+//   2) else the most recently COMPLETED tournament,
+//   3) else the soonest upcoming, else null.
+export function pickTargetTournament(tournaments, todayISO) {
+  const today = todayISO.slice(0, 10);
+  const ongoing = tournaments.filter((t) => t.startDate <= today && today <= t.endDate);
+  if (ongoing.length) {
+    return ongoing.slice().sort((a, b) => a.startDate.localeCompare(b.startDate)).pop();
+  }
+  const completed = tournaments.filter((t) => t.endDate < today);
+  if (completed.length) {
+    return completed.slice().sort((a, b) => a.endDate.localeCompare(b.endDate)).pop();
+  }
+  const upcoming = tournaments
+    .filter((t) => t.startDate > today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  return upcoming[0] || null;
+}
+
 // matchId -> short stage tag, plus the tournament's knockout stage (fallback tag).
 async function stageInfo(tournamentId) {
   const sdata = await lolFetch(`getStandingsV3?hl=ko-KR&tournamentId=${tournamentId}`);
@@ -293,28 +328,42 @@ const BRACKET_TAB_OR =
   ' OR MatchSchedule.Tab LIKE "%Gauntlet%" OR MatchSchedule.Tab LIKE "%Final%"' +
   ' OR MatchSchedule.Tab LIKE "%Play-In%" OR MatchSchedule.Tab LIKE "%Bracket%")';
 
-// Bracket = the CURRENT tournament's knockout first (built from the lolesports
-// schedule so it shows even when only partially drawn / TBD slots remain), and
-// only when there's no ongoing knockout do we fall back to the latest completed
-// Leaguepedia bracket tree.
+// Bracket = the "ongoing-or-latest" tournament across LCK/MSI/Worlds. LCK is
+// built from the lolesports schedule (freshest, shows TBD slots when ongoing);
+// MSI/Worlds use Leaguepedia's proper bracket tree. Leaguepedia is also the LCK
+// fallback when lolesports has no knockout for the chosen tournament.
 async function getBracket(ctx) {
-  // Let a transient lolesports error PROPAGATE (so withCache returns an uncached
-  // error and the next load retries) rather than silently caching the wrong
-  // (completed) bracket. Only fall back to Leaguepedia when there is genuinely
-  // no current knockout (getCurrentBracketFromLol returns null).
-  const live = await getCurrentBracketFromLol(ctx);
-  if (live && live.rounds.length) return live;
-  return getLeaguepediaBracket();
+  // Pick the target tournament across ALL covered leagues: ongoing first, else
+  // the most recent completed one (see pickTargetTournament).
+  const nowISO = new Date().toISOString();
+  const target = pickTargetTournament(await allTournaments(), nowISO);
+  if (!target) return getLeaguepediaBracket(LCK_LEAGUE, new Date().getFullYear());
+
+  const today = nowISO.slice(0, 10);
+  const ongoing = target.startDate <= today && today <= target.endDate;
+  const year = Number(target.startDate.slice(0, 4));
+
+  // LCK → build from lolesports (freshest: includes completed playoffs that
+  // Leaguepedia often hasn't entered yet, and live TBD slots when ongoing).
+  // Fall back to Leaguepedia if lolesports has no knockout for it. A transient
+  // lolesports error PROPAGATES rather than caching the wrong bracket.
+  if (target.league === "lck") {
+    const lol = await buildLckBracketFromLol(ctx, target, ongoing);
+    if (lol && lol.rounds.length) return lol;
+    return getLeaguepediaBracket(LCK_LEAGUE, year);
+  }
+
+  // MSI / Worlds → Leaguepedia proper double-elim / play-in tree.
+  return getLeaguepediaBracket(target.leagueObj, year);
 }
 
-// Build the in-progress knockout bracket from lolesports schedule matches.
-async function getCurrentBracketFromLol(ctx) {
-  const cur = currentTournament(await getLckTournaments());
-  if (!cur) return null;
+// Build an LCK knockout bracket from lolesports schedule matches for the given
+// tournament (works for both the ongoing and the most-recent-completed one).
+async function buildLckBracketFromLol(ctx, cur, ongoing) {
   const { knockout } = await stageInfo(cur.id);
-  if (!knockout) return null; // current tournament has no knockout stage
+  if (!knockout) return null; // tournament has no knockout stage
 
-  const events = await fetchScheduleEvents();
+  const events = await fetchScheduleEvents(LCK_LEAGUE);
   await applyLightLogos(events, ctx);
   const ko = events.filter((e) => inRange(e.startTime, cur) && !isRegularBlock(e.blockName));
   if (!ko.length) return null;
@@ -341,7 +390,7 @@ async function getCurrentBracketFromLol(ctx) {
   return {
     available: true,
     tournament: `LCK ${cur.startDate.slice(0, 4)} · ${knockout.label}`,
-    ongoing: true,
+    ongoing,
     rounds,
   };
 }
@@ -379,17 +428,13 @@ function lolMatchToBracket(e) {
 // grab every bracket-tab match for the league-year, then keep only the most
 // recent tournament page's rows. (Falls back to the previous year once if the
 // current year has no bracket yet.)
-async function getLeaguepediaBracket() {
-  const year = new Date().getFullYear();
-
-  let rows = await bracketRows(year);
-  let usedYear = year;
+async function getLeaguepediaBracket(league, year) {
+  let rows = await bracketRows(league, year);
   if (!rows.length) {
-    rows = await bracketRows(year - 1);
-    usedYear = year - 1;
+    rows = await bracketRows(league, year - 1);
   }
   if (!rows.length) {
-    return { available: false, tournament: `LCK ${year}`, rounds: [] };
+    return { available: false, tournament: `${league.label} ${year}`, rounds: [] };
   }
 
   // Pick the most recently-played tournament page among the results.
@@ -416,14 +461,23 @@ async function getLeaguepediaBracket() {
   };
 }
 
-function bracketRows(year) {
+// Leaguepedia OverviewPage prefixes per league (verified against live Cargo data).
+function lpPagePattern(league, year) {
+  switch (league.slug) {
+    case "msi": return `${year} Mid-Season Invitational%`;
+    case "worlds": return `${year} Season World Championship%`;
+    default: return `LCK/${year}%`;
+  }
+}
+
+function bracketRows(league, year) {
   return lpCargo({
     tables: "MatchSchedule",
     fields:
       "OverviewPage,Team1,Team2,Team1Score,Team2Score,Winner,Tab,N_TabInPage,N_MatchInTab,BestOf,DateTime_UTC,MatchId",
-    where: `MatchSchedule.OverviewPage LIKE "LCK/${year}%" AND ${BRACKET_TAB_OR}`,
+    where: `MatchSchedule.OverviewPage LIKE "${lpPagePattern(league, year)}" AND ${BRACKET_TAB_OR}`,
     order_by: "MatchSchedule.N_TabInPage,MatchSchedule.N_MatchInTab",
-    limit: "200",
+    limit: "300",
   });
 }
 

@@ -89,6 +89,10 @@ Leaguepedia OverviewPage 패턴(리그별):
 3. `GET /api/bracket` → 지금은 LCK 스플릿2 PO 트리. 2025 MSI 페이지(`2025 Mid-Season Invitational`)로 임시 쿼리해 국제 정식 트리가 라운드 컬럼으로 렌더되는지 확인.
 4. 로컬에서 일정/대진표 탭 전환, 리그 배지 표시, 월 이동 동작 확인. 타임존(밴쿠버/한국) 전환 시 재렌더 정상.
 
+## 구현 노트 (설계 대비 변경, 2026-06-16)
+
+- **LCK 대진표는 진행 중/완료 무관하게 lolesports 우선, Leaguepedia는 폴백.** 당초 A안은 "완료 LCK는 Leaguepedia 정식 트리"였으나, 실제 Leaguepedia의 `LCK/2026%` 에는 LCK Cup(3월) 브래킷만 있고 Split2/Road-to-MSI(6/14 종료) 플레이오프가 아직 입력되지 않아 Leaguepedia-우선은 3개월 전 Cup을 "최신"으로 표시(= 사용자 불만 재현)한다. lolesports에는 완료된 RTM 결과가 있으므로 LCK는 lolesports로 빌드해 진짜 최신 트리를 보장한다. (MSI/Worlds는 설계대로 Leaguepedia 정식 트리 유지.)
+
 ## 범위 밖 (YAGNI)
 
 - 리그별 필터 토글 UI(LCK만 보기 등)는 만들지 않는다 — 요청에 없음.
