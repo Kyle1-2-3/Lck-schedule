@@ -44,7 +44,14 @@ function matchCard(ev) {
 
   const teams = el("div", "match-card__teams");
   const stageText = ev.stage ? `${ev.stage} · ${ev.blockName}` : ev.blockName;
-  if (stageText) teams.append(el("div", "match-card__stage", stageText));
+  if (ev.leagueLabel || stageText) {
+    const head = el("div", "match-card__stage");
+    if (ev.leagueLabel) {
+      head.append(el("span", `league-chip league-chip--${ev.league}`, ev.leagueLabel));
+    }
+    if (stageText) head.append(el("span", "match-card__stage-text", stageText));
+    teams.append(head);
+  }
   for (const t of ev.teams) teams.append(teamRow(t));
 
   const status = el("div", "match-card__status");
