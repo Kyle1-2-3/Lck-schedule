@@ -44,14 +44,10 @@ function matchCard(ev) {
 
   const teams = el("div", "match-card__teams");
   const stageText = ev.stage ? `${ev.stage} · ${ev.blockName}` : ev.blockName;
-  if (ev.leagueLabel || stageText) {
-    const head = el("div", "match-card__stage");
-    if (ev.leagueLabel) {
-      head.append(el("span", `league-chip league-chip--${ev.league}`, ev.leagueLabel));
-    }
-    if (stageText) head.append(el("span", "match-card__stage-text", stageText));
-    teams.append(head);
-  }
+  const stageParts = [];
+  if (ev.leagueLabel) stageParts.push(ev.leagueLabel);
+  if (stageText) stageParts.push(stageText);
+  if (stageParts.length) teams.append(el("div", "match-card__stage", stageParts.join(" · ")));
   for (const t of ev.teams) teams.append(teamRow(t));
 
   const status = el("div", "match-card__status");
